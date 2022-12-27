@@ -1,0 +1,3 @@
+python bully.py 10 5 2
+python bully.py 10 4 2
+python bully.py 4 3 2
