@@ -11,9 +11,15 @@ def main():
     socket = context.socket(zmq.SUB)
     socket.connect(f"tcp://127.0.0.1:{PORT}")
 
+    ## Subscribe to topics
+    # for topic in topics:
+    #     socket.setsockopt_string(zmq.SUBSCRIBE, topic)
+
+    # Or this also works    
     for topic in topics:
-        socket.setsockopt_string(zmq.SUBSCRIBE, topic)
-    
+        socket.subscribe(topic)
+
+
     # Register to poller
     poller = zmq.Poller()
     poller.register(socket, zmq.POLLIN)
@@ -21,7 +27,7 @@ def main():
     while True:
         events = dict(poller.poll(timeout=TIMEOUT))
 
-        if socket in events:
+        if (socket in events) and (events[socket] == zmq.POLLIN):
             message = socket.recv_string()
             print("Received message:", message)
         else:

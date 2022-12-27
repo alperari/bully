@@ -17,8 +17,7 @@ TIMEOUT = 2000
 def responder(nodeId, ids_alive_filtered):
     print("RESPONDER STARTS", nodeId)
 
-
-    # Subscribe to all alive ports
+    # Connect and subscribe to all alive ports
     sockets = []
     for id_alive in ids_alive_filtered:
         port = 5550+id_alive
@@ -39,15 +38,48 @@ def responder(nodeId, ids_alive_filtered):
         poller = zmq.Poller()
         poller.register(socket_subscribe, zmq.POLLIN)
 
+
     # Receive messages
     for socket in sockets:
         evts = dict(poller.poll(timeout=TIMEOUT))
         if socket in evts:
-            topic = socket.recv_string()
-            data = socket.recv_json()
-            print(f"Topic: {topic} => data: {data}")
+            message = socket.recv_json()
+
+            # Parse received message
+            senderId = message["senderId"]
+            data = message["data"]
+
+            if data == "TERMINATE":
+                # Leader is already selected
+                # Notify main and finish myself
+                return "END"
+                break
+            
+            elif data == "LEADER":
+                # If senderId < myid, then send "RESP" to sender
+                if senderId < nodeId:
+                    # TODO: send "RESP" to sender
+                    send_port = port = 5550+int(senderId)
+                    send_context = zmq.Context()
+                    socket_send = send_context.socket(zmq.PUB)
+                    socket_send.connect(f"tcp://127.0.0.1:{send_port}")
+
+                    message = {
+                        "senderId": nodeId,
+                        "data": "RESP"
+                    }
+
+                    # after that, notify main to broadcast "LEADER"
+                    return "BROADCAST_LEADER"
+                    pass
+
+               
         else:
+            # No response means i am the leader
+            # Notify main to  broadcast "TERMINATE"
             print("Timeout!")
+            return "BROADCAST_TERMINATE"
+
 
     # incoming_message = []
 
@@ -75,11 +107,27 @@ def leader(nodeId, isStarter, ids_alive_filtered):
     listener_thread = threading.Thread(target=responder, args=(nodeId, ids_alive_filtered,))
     listener_thread.start()
 
-    listener_thread.join()
+    responder_message = listener_thread.join()
 
-    # If no node has responded with "OK"
-    #   then it means this node is the leader, i.e. highest id in the network
-    #   and it will broadcast "TERMINATE"
+    if responder_message == "END":
+        # Game is over
+        time.sleep(1)
+
+        return
+
+    elif responder_message == "BROADCAST_LEADER":
+        time.sleep(1)
+
+        # TODO: broadcast "LEADER"
+        return
+
+    elif responder_message == "BROADCAST_TERMINATE":
+        # Game is over, i am the leader
+        time.sleep(1)
+
+        # TODO: broadcast "TERMINATE"
+        return 
+
 
     if isStarter:
         pass
@@ -94,9 +142,9 @@ def leader(nodeId, isStarter, ids_alive_filtered):
 def main(args):  
     global ids, ids_alive, ids_starter, has_received_leader_buffer
 
-    numProc =  3
-    numAlive = 2
-    numStarter = 2
+    numProc =  6
+    numAlive = 4
+    numStarter = 1
 
     has_received_leader_buffer = [0 for i in range(numProc)]
     # numProc = int(args[1])
@@ -107,9 +155,9 @@ def main(args):
     # ids_alive = random.sample(ids, numAlive)
     # ids_starter = random.sample(ids_alive, numStarter)
 
-    ids = [0,1,2]
-    ids_alive = [1,2]
-    ids_starter = [1]
+    ids = [0,1,2,3,4,5]
+    ids_alive = [1,2,3,4]
+    ids_starter = [2]
 
     print("Alives:", ids_alive, sep="\n")
     print("Starters:", ids_starter, sep="\n")
