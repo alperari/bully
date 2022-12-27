@@ -14,9 +14,9 @@ has_received_leader_buffer = []
 TIMEOUT = 2000
 
 # "responder" method is assigned to each process' listener_thread
-def responder(nodeId, ids_alive_filtered):
+def responder(nodeId, ids_alive_filtered, responder_message):
     print("RESPONDER STARTS", nodeId)
-
+    
     # Connect and subscribe to all alive ports
     sockets = []
     for id_alive in ids_alive_filtered:
@@ -78,7 +78,7 @@ def responder(nodeId, ids_alive_filtered):
             # No response means i am the leader
             # Notify main to  broadcast "TERMINATE"
             print("Timeout!")
-            return "BROADCAST_TERMINATE"
+            responder_message[0] = "BROADCAST_TERMINATE"
 
 
     # incoming_message = []
@@ -97,31 +97,36 @@ def responder(nodeId, ids_alive_filtered):
     pass
 
 
-# "leader" method is assigned to every node alive
+
+
+# "leader" method is assigned to every node(process) alive
 def leader(nodeId, isStarter, ids_alive_filtered):
     
     pid = os.getpid()
     print("PROCESS STARTS ", pid, nodeId, isStarter, ids_alive_filtered)
+    time.sleep(1)
+
+    responder_message = [""]
 
     # Create listener thread
-    listener_thread = threading.Thread(target=responder, args=(nodeId, ids_alive_filtered,))
+    listener_thread = threading.Thread(target=responder, args=(nodeId, ids_alive_filtered, responder_message,))
     listener_thread.start()
 
-    responder_message = listener_thread.join()
+    listener_thread.join()
 
-    if responder_message == "END":
+    if responder_message[0] == "END":
         # Game is over
         time.sleep(1)
 
         return
 
-    elif responder_message == "BROADCAST_LEADER":
+    elif responder_message[0] == "BROADCAST_LEADER":
         time.sleep(1)
 
         # TODO: broadcast "LEADER"
         return
 
-    elif responder_message == "BROADCAST_TERMINATE":
+    elif responder_message[0] == "BROADCAST_TERMINATE":
         # Game is over, i am the leader
         time.sleep(1)
 
@@ -135,6 +140,8 @@ def leader(nodeId, isStarter, ids_alive_filtered):
         pass
     
     time.sleep(1)
+    print("process", nodeId, "responder_message[0]:", responder_message[0])
+
     pass
 
 
