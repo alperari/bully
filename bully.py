@@ -10,13 +10,16 @@ lock = threading.Lock()
 
 has_received_leader_buffer = []
 
+# Set timeout to be 2 sec
+TIMEOUT = 2000
+
 # "responder" method is assigned to each process' listener_thread
 def responder(nodeId, ids_alive_filtered):
     print("RESPONDER STARTS", nodeId)
 
 
     # Subscribe to all alive ports
-    subscribe_sockets = []
+    sockets = []
     for id_alive in ids_alive_filtered:
         port = 5550+id_alive
         context = zmq.Context()
@@ -26,24 +29,25 @@ def responder(nodeId, ids_alive_filtered):
         socket_subscribe.subscribe("LEADER")
         socket_subscribe.subscribe("TERMINATE")
         
+        sockets.append(socket_subscribe)
+
+
+    for i in range(len(sockets)):
+        socket_subscribe = sockets[i]
+        # Register subscribe socket to poller
+        # So we could avoid infinite receive() blocks
         poller = zmq.Poller()
         poller.register(socket_subscribe, zmq.POLLIN)
 
-        subscribe_sockets.append(socket_subscribe)
-
-   
     # Receive messages
-    for socket in subscribe_sockets:
-        evts = dict(poller.poll(timeout=1000))
-
+    for socket in sockets:
+        evts = dict(poller.poll(timeout=TIMEOUT))
         if socket in evts:
-            print(1)
             topic = socket.recv_string()
             data = socket.recv_json()
             print(f"Topic: {topic} => data: {data}")
         else:
-            print(2)
-
+            print("Timeout!")
 
     # incoming_message = []
 
@@ -56,6 +60,8 @@ def responder(nodeId, ids_alive_filtered):
     # has_received_leader_buffer[nodeId] = 1
     # lock.release()
 
+    time.sleep(2)
+    print("End of a processor.")
     pass
 
 
