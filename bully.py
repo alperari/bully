@@ -10,23 +10,40 @@ lock = threading.Lock()
 
 has_received_leader_buffer = []
 
-ids = []
-ids_alive = []
-ids_starter =  []
-
 # "responder" method is assigned to each process' listener_thread
-def responder(nodeId):
-    global has_received_leader_buffer
-
+def responder(nodeId, ids_alive_filtered):
     print("RESPONDER STARTS", nodeId)
 
-    # Listen to other processes
-    # port = 5550+nodeId
-    # context = zmq.Context()
-    # socket_receive = context.socket(zmq.PULL)
-    # socket_receive.bind(f"tcp://localhost:{port}")
+
+    # Subscribe to all alive ports
+    subscribe_sockets = []
+    for id_alive in ids_alive_filtered:
+        port = 5550+id_alive
+        context = zmq.Context()
+        socket_subscribe = context.socket(zmq.SUB)
+        socket_subscribe.connect(f"tcp://127.0.0.1:{port}")
         
+        socket_subscribe.subscribe("LEADER")
+        socket_subscribe.subscribe("TERMINATE")
         
+        poller = zmq.Poller()
+        poller.register(socket_subscribe, zmq.POLLIN)
+
+        subscribe_sockets.append(socket_subscribe)
+
+   
+    # Receive messages
+    for socket in subscribe_sockets:
+        evts = dict(poller.poll(timeout=1000))
+
+        if socket in evts:
+            print(1)
+            topic = socket.recv_string()
+            data = socket.recv_json()
+            print(f"Topic: {topic} => data: {data}")
+        else:
+            print(2)
+
 
     # incoming_message = []
 
@@ -35,23 +52,22 @@ def responder(nodeId):
     #     # print ('ResultCollector process id:', os.getpid(), " Retrieved data:", incomingData )
     #     incoming_partial_results.append(incomingData)
 
-    lock.acquire()
-    has_received_leader_buffer[nodeId] = 1
-    lock.release()
+    # lock.acquire()
+    # has_received_leader_buffer[nodeId] = 1
+    # lock.release()
 
     pass
 
 
 # "leader" method is assigned to every node alive
-def leader(nodeId, isStarter):
+def leader(nodeId, isStarter, ids_alive_filtered):
+    
     pid = os.getpid()
-    print("PROCESS STARTS ", pid, nodeId, isStarter)
+    print("PROCESS STARTS ", pid, nodeId, isStarter, ids_alive_filtered)
 
     # Create listener thread
-    listener_thread = threading.Thread(target=responder, args=(nodeId,))
+    listener_thread = threading.Thread(target=responder, args=(nodeId, ids_alive_filtered,))
     listener_thread.start()
-
-
 
     listener_thread.join()
 
@@ -64,10 +80,11 @@ def leader(nodeId, isStarter):
     else:
         pass
     
-    time.sleep(2)
+    time.sleep(1)
     pass
 
 
+    
 def main(args):  
     global ids, ids_alive, ids_starter, has_received_leader_buffer
 
@@ -76,7 +93,6 @@ def main(args):
     numStarter = 2
 
     has_received_leader_buffer = [0 for i in range(numProc)]
-
     # numProc = int(args[1])
     # numAlive = int(args[2])
     # numStarter = int(args[3])
@@ -99,7 +115,9 @@ def main(args):
     
     for i in ids_alive:
         isStarter = (i in ids_starter)
-        process = Process(target=leader, args=(i, isStarter,))
+        ids_alive_filtered = list(filter(lambda id: i!=id, ids_alive))
+        
+        process = Process(target=leader, args=(i, isStarter, ids_alive_filtered,))
         processes.append(process)
 
     for process in processes:
@@ -110,3 +128,9 @@ def main(args):
 
     pass
 
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("Invalid command line arguments!")
+    else:
+        main(args=sys.argv)
