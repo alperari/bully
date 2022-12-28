@@ -11,7 +11,7 @@ lock = threading.Lock()
 has_received_leader_buffer = []
 
 # Set timeout to be 10 sec
-TIMEOUT = 10000
+TIMEOUT = 5000
 
 
 
@@ -46,36 +46,39 @@ def responder(nodeId, ids_alive):
         if socket in evts:
             message = socket.recv_string()
 
-            print("nodeId:", nodeId, "received:", message)
 
             message_parsed = message.split(":")
 
-            body = message_parsed[0]
-            sender_id = int(message_parsed[1])-5550
+            received_body = message_parsed[0]
+            received_port = message_parsed[1]
+            received_senderId = message_parsed[2]
 
-            # if body == "TERMINATE":
-            #     # Leader is already selected
-            #     # Notify main and finish myself
-            #     return "END"
-            #     break
+            print("nodeId:", nodeId, "received:", message)
             
-            # elif body == "LEADER":
-            #     # If senderId < myid, then send "RESP" to sender
-            #     if sender_id < nodeId:
-            #         # TODO: send "RESP" to sender
-            #         send_port = port = 5550+int(sender_id)
-            #         send_context = zmq.Context()
-            #         socket_send = send_context.socket(zmq.PUB)
-            #         socket_send.connect(f"tcp://127.0.0.1:{send_port}")
+            if received_body == "TERMINATE":
+                # Leader is already selected
+                # Notify main and finish myself
+                return "END"
+                break
+            
+            elif received_body == "LEADER":
+                # If senderId < myid, then send "RESP" to sender
+                if sender_id < nodeId:                    
+                    # TODO: send "RESP" to sender
+                    resp_context = zmq.Context()
 
-            #         message = {
-            #             "sender_id": nodeId,
-            #             "data": "RESP"
-            #         }
+                    resp_socket = resp_context.socket(zmq.PUB)
+                    resp_socket.connect(f"tcp://127.0.0.1:{received_port}")
 
-            #         # after that, notify main to broadcast "LEADER"
-            #         return "BROADCAST_LEADER"
-            #         pass
+                    time.sleep(1)
+
+                    print("nodeId:", nodeId, "sending RESP to the sender nodeId:", received_senderId)
+                    resp_message = f"RESP:{5550+nodeId}:{nodeId}"
+                    resp_socket.send_string(resp_message)
+
+                    # after that, notify main to broadcast "LEADER"
+                    return "BROADCAST_LEADER"
+                    pass
 
         else:
             # If no message is received for TIMEOUT amount of time
@@ -109,7 +112,7 @@ def leader(nodeId, isStarter, ids_alive):
         # Broadcast 'LEADER'
 
         port = 5552
-        message = f"LEADER:{port}"
+        message = f"LEADER:{port}:{nodeId}"
 
         context = zmq.Context()
         socket = context.socket(zmq.PUB)
