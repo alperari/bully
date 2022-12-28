@@ -10,87 +10,81 @@ lock = threading.Lock()
 
 has_received_leader_buffer = []
 
-# Set timeout to be 2 sec
-TIMEOUT = 2000
+# Set timeout to be 10 sec
+TIMEOUT = 10000
+
+
 
 # "responder" method is assigned to each process' listener_thread
-def responder(nodeId, ids_alive_filtered, responder_message):
+def responder(nodeId, ids_alive):
     print("RESPONDER STARTS", nodeId)
     
+    time.sleep(1)
+
     # Connect and subscribe to all alive ports
-    sockets = []
-    for id_alive in ids_alive_filtered:
-        port = 5550+id_alive
-        context = zmq.Context()
-        socket_subscribe = context.socket(zmq.SUB)
-        socket_subscribe.connect(f"tcp://127.0.0.1:{port}")
-        
-        socket_subscribe.subscribe("LEADER")
-        socket_subscribe.subscribe("TERMINATE")
-        
-        sockets.append(socket_subscribe)
+    context = zmq.Context()
+    socket = context.socket(zmq.SUB)
 
+    socket.subscribe("LEADER")
+    socket.subscribe("TERMINATE")
 
-    for i in range(len(sockets)):
-        socket_subscribe = sockets[i]
-        # Register subscribe socket to poller
-        # So we could avoid infinite receive() blocks
-        poller = zmq.Poller()
-        poller.register(socket_subscribe, zmq.POLLIN)
+    ports = [5550 + int(i) for i in ids_alive]
 
+    for port in ports:
+        socket.connect(f"tcp://127.0.0.1:{port}")
 
-    # Receive messages
-    for socket in sockets:
+    # Register subscribe socket to poller
+    # So we could avoid infinite receive() blocks
+    poller = zmq.Poller()
+    poller.register(socket, zmq.POLLIN)
+
+    print("NodeId:", nodeId, "listening on ports:", ports)
+
+    # Start receiving messages
+    while True:
         evts = dict(poller.poll(timeout=TIMEOUT))
         if socket in evts:
-            message = socket.recv_json()
+            message = socket.recv_string()
 
-            # Parse received message
-            senderId = message["senderId"]
-            data = message["data"]
+            print("nodeId:", nodeId, "received:", message)
 
-            if data == "TERMINATE":
-                # Leader is already selected
-                # Notify main and finish myself
-                return "END"
-                break
+            message_parsed = message.split(":")
+
+            body = message_parsed[0]
+            sender_id = int(message_parsed[1])-5550
+
+            # if body == "TERMINATE":
+            #     # Leader is already selected
+            #     # Notify main and finish myself
+            #     return "END"
+            #     break
             
-            elif data == "LEADER":
-                # If senderId < myid, then send "RESP" to sender
-                if senderId < nodeId:
-                    # TODO: send "RESP" to sender
-                    send_port = port = 5550+int(senderId)
-                    send_context = zmq.Context()
-                    socket_send = send_context.socket(zmq.PUB)
-                    socket_send.connect(f"tcp://127.0.0.1:{send_port}")
+            # elif body == "LEADER":
+            #     # If senderId < myid, then send "RESP" to sender
+            #     if sender_id < nodeId:
+            #         # TODO: send "RESP" to sender
+            #         send_port = port = 5550+int(sender_id)
+            #         send_context = zmq.Context()
+            #         socket_send = send_context.socket(zmq.PUB)
+            #         socket_send.connect(f"tcp://127.0.0.1:{send_port}")
 
-                    message = {
-                        "senderId": nodeId,
-                        "data": "RESP"
-                    }
+            #         message = {
+            #             "sender_id": nodeId,
+            #             "data": "RESP"
+            #         }
 
-                    # after that, notify main to broadcast "LEADER"
-                    return "BROADCAST_LEADER"
-                    pass
+            #         # after that, notify main to broadcast "LEADER"
+            #         return "BROADCAST_LEADER"
+            #         pass
 
-               
         else:
-            # No response means i am the leader
-            # Notify main to  broadcast "TERMINATE"
+            # If no message is received for TIMEOUT amount of time
+            # Then this means i am leader
+            # Notify main
             print("Timeout!")
-            responder_message[0] = "BROADCAST_TERMINATE"
+            return "BROADCAST_TERMINATE"
 
 
-    # incoming_message = []
-
-    # for i in range(self.num_worker):
-    #     incomingData = socket_receive.recv_json()
-    #     # print ('ResultCollector process id:', os.getpid(), " Retrieved data:", incomingData )
-    #     incoming_partial_results.append(incomingData)
-
-    # lock.acquire()
-    # has_received_leader_buffer[nodeId] = 1
-    # lock.release()
 
     time.sleep(2)
     print("End of a processor.")
@@ -99,34 +93,51 @@ def responder(nodeId, ids_alive_filtered, responder_message):
 
 
 
-# "leader" method is assigned to every node(process) alive
-def leader(nodeId, isStarter, ids_alive_filtered):
+
+# "leader" method is assigned to every node alive
+def leader(nodeId, isStarter, ids_alive):
     
     pid = os.getpid()
-    print("PROCESS STARTS ", pid, nodeId, isStarter, ids_alive_filtered)
-    time.sleep(1)
+    print("PROCESS STARTS ", pid, nodeId, isStarter, ids_alive)
 
-    responder_message = [""]
-
-    # Create listener thread
-    listener_thread = threading.Thread(target=responder, args=(nodeId, ids_alive_filtered, responder_message,))
+    # Start listener thread listening on other ports (nodes)
+    listener_thread = threading.Thread(target=responder, args=(nodeId, ids_alive,))
     listener_thread.start()
 
-    listener_thread.join()
+    
+    if isStarter:
+        # Broadcast 'LEADER'
 
-    if responder_message[0] == "END":
+        port = 5552
+        message = f"LEADER:{port}"
+
+        context = zmq.Context()
+        socket = context.socket(zmq.PUB)
+        socket.bind(f"tcp://127.0.0.1:{port}")
+
+        # Make sure others started listening before i send LEADER
+        time.sleep(2) 
+
+        print("NodeId:", nodeId, "sending message:", message)
+        socket.send_string(message)
+
+
+
+    responder_message = listener_thread.join()
+
+    if responder_message == "END":
         # Game is over
         time.sleep(1)
 
         return
 
-    elif responder_message[0] == "BROADCAST_LEADER":
+    elif responder_message == "BROADCAST_LEADER":
         time.sleep(1)
 
         # TODO: broadcast "LEADER"
         return
 
-    elif responder_message[0] == "BROADCAST_TERMINATE":
+    elif responder_message == "BROADCAST_TERMINATE":
         # Game is over, i am the leader
         time.sleep(1)
 
@@ -140,8 +151,6 @@ def leader(nodeId, isStarter, ids_alive_filtered):
         pass
     
     time.sleep(1)
-    print("process", nodeId, "responder_message[0]:", responder_message[0])
-
     pass
 
 
@@ -176,9 +185,9 @@ def main(args):
     
     for i in ids_alive:
         isStarter = (i in ids_starter)
-        ids_alive_filtered = list(filter(lambda id: i!=id, ids_alive))
+        # ids_alive = list(filter(lambda id: i!=id, ids_alive))
         
-        process = Process(target=leader, args=(i, isStarter, ids_alive_filtered,))
+        process = Process(target=leader, args=(i, isStarter, ids_alive,))
         processes.append(process)
 
     for process in processes:
