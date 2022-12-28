@@ -16,7 +16,7 @@ TIMEOUT = 5000
 
 
 # "responder" method is assigned to each process' listener_thread
-def responder(nodeId, ids_alive):
+def responder(nodeId, ids_alive, pubsocket):
     print("RESPONDER STARTS", nodeId)
     
     time.sleep(1)
@@ -27,6 +27,8 @@ def responder(nodeId, ids_alive):
 
     socket.subscribe("LEADER")
     socket.subscribe("TERMINATE")
+    socket.subscribe("RESP")
+
 
     ports = [5550 + int(i) for i in ids_alive]
 
@@ -50,8 +52,8 @@ def responder(nodeId, ids_alive):
             message_parsed = message.split(":")
 
             received_body = message_parsed[0]
-            received_port = message_parsed[1]
-            received_senderId = message_parsed[2]
+            received_port = int(message_parsed[1])
+            sender_id = int(message_parsed[2])
 
             print("nodeId:", nodeId, "received:", message)
             
@@ -62,31 +64,31 @@ def responder(nodeId, ids_alive):
                 break
             
             elif received_body == "LEADER":
-                # If senderId < myid, then send "RESP" to sender
+                # If sender_id < myid, then send "RESP" to sender
                 if sender_id < nodeId:                    
                     # TODO: send "RESP" to sender
-                    resp_context = zmq.Context()
+                    
+                    # pubsocket.bind(f"tcp://127.0.0.1:{5550+nodeId}")
+                    time.sleep(2)        
 
-                    resp_socket = resp_context.socket(zmq.PUB)
-                    resp_socket.connect(f"tcp://127.0.0.1:{received_port}")
-
-                    time.sleep(1)
-
-                    print("nodeId:", nodeId, "sending RESP to the sender nodeId:", received_senderId)
                     resp_message = f"RESP:{5550+nodeId}:{nodeId}"
-                    resp_socket.send_string(resp_message)
+                    
+                    print("nodeId:", nodeId, "sending RESP to the sender nodeId:", sender_id, "on its own port:", 5550+nodeId)
+                    pubsocket.send_string(resp_message)
+                    
+                    # pubsocket.disconnect(f"tcp://127.0.0.1:{received_port}")
+
 
                     # after that, notify main to broadcast "LEADER"
-                    return "BROADCAST_LEADER"
+                    # return "BROADCAST_LEADER"
                     pass
 
         else:
             # If no message is received for TIMEOUT amount of time
             # Then this means i am leader
             # Notify main
-            print("Timeout!")
+            print("Timeout!", nodeId)
             return "BROADCAST_TERMINATE"
-
 
 
     time.sleep(2)
@@ -103,20 +105,24 @@ def leader(nodeId, isStarter, ids_alive):
     pid = os.getpid()
     print("PROCESS STARTS ", pid, nodeId, isStarter, ids_alive)
 
+
+    # Open my publisher socket 
+    # (also share this pub socket with listener thread)
+    port = 5550 + nodeId
+    
+    context = zmq.Context()
+    socket = context.socket(zmq.PUB)
+    socket.bind(f"tcp://127.0.0.1:{port}")
+
     # Start listener thread listening on other ports (nodes)
-    listener_thread = threading.Thread(target=responder, args=(nodeId, ids_alive,))
+    listener_thread = threading.Thread(target=responder, args=(nodeId, ids_alive, socket,))
     listener_thread.start()
 
     
     if isStarter:
         # Broadcast 'LEADER'
 
-        port = 5552
         message = f"LEADER:{port}:{nodeId}"
-
-        context = zmq.Context()
-        socket = context.socket(zmq.PUB)
-        socket.bind(f"tcp://127.0.0.1:{port}")
 
         # Make sure others started listening before i send LEADER
         time.sleep(2) 

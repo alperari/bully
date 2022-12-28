@@ -2,7 +2,7 @@ import zmq
 import time
 import json
 
-PORT = 5553
+PORT = 5552
 topics = ["LEADER","TERMINATE"]
 
 def main():
