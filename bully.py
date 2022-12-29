@@ -12,7 +12,7 @@ TIMEOUT = 5000
 
 # "responder" method is assigned to each process' listener_thread
 def responder(nodeId, ids_alive, pubsocket, responder_return):
-    print("RESPONDER STARTS", nodeId)
+    print("RESPONDER STARTS:", nodeId)
     
     # Connect and subscribe to all alive ports
     context = zmq.Context()
@@ -82,6 +82,8 @@ def responder(nodeId, ids_alive, pubsocket, responder_return):
             # Notify main
             if not responder_return["RECEIVED_RESP"]:
                 responder_return["BROADCAST_TERMINATE"] = 1
+                return
+                
     # End of listener_thread
     pass
 
@@ -93,7 +95,7 @@ def responder(nodeId, ids_alive, pubsocket, responder_return):
 def leader(nodeId, isStarter, ids_alive):
     
     pid = os.getpid()
-    print("PROCESS STARTS ", pid, nodeId, isStarter)
+    print("PROCESS STARTS:", pid, nodeId, isStarter)
 
     # Open my publisher socket 
     # (also share this pub socket with listener thread)
@@ -111,7 +113,7 @@ def leader(nodeId, isStarter, ids_alive):
     listener_thread.start()
 
     # Make sure others started listening before i send LEADER
-    time.sleep(2) 
+    time.sleep(1) 
 
 
     if isStarter:
@@ -122,7 +124,7 @@ def leader(nodeId, isStarter, ids_alive):
 
     while not responder_return["BROADCAST_LEADER"]:
         # Wait until i need to broadcast "LEADER"
-        if responder_return["RECEIVED_RESP"]:
+        if responder_return["RECEIVED_RESP"] or responder_return["BROADCAST_TERMINATE"]:
             break
         pass
     
@@ -131,14 +133,15 @@ def leader(nodeId, isStarter, ids_alive):
         message = f"LEADER:{port}:{nodeId}:-1"
 
         print("PROCESS MULTICASTS LEADER MSG:", nodeId)
+        time.sleep(0.1)
         socket.send_string(message)
 
 
-
+    time.sleep(0.25)
     if not responder_return["RECEIVED_RESP"]:
         while not responder_return["BROADCAST_TERMINATE"]:
             pass
-        
+
         message = f"TERMINATE:{port}:{nodeId}:-1"
 
         print("PROCESS BROADCASTS TERMINATE MSG:", nodeId)
@@ -150,21 +153,22 @@ def leader(nodeId, isStarter, ids_alive):
 
     
 def main(args):  
-    numProc =  6
-    numAlive = 4
-    numStarter = 1
-
-    # numProc = int(args[1])
-    # numAlive = int(args[2])
-    # numStarter = int(args[3])
+    numProc = int(args[1])
+    numAlive = int(args[2])
+    numStarter = int(args[3])
 
     ids = [i for i in range(numProc)]
     ids_alive = random.sample(ids, numAlive)
     ids_starter = random.sample(ids_alive, numStarter)
 
-    ids = [0,1,2,3,4,5,6,7,8,9]
-    ids_alive = [9,8,0,3]
-    ids_starter = [9,3]
+    
+    # numProc =  6
+    # numAlive = 4
+    # numStarter = 1  
+   
+    # ids = [0,1,2,3,4,5,6,7,8,9]
+    # ids_alive = [2,4,1,9,0]
+    # ids_starter = [9,4,2]
 
     print("Alives:", ids_alive, sep="\n")
     print("Starters:", ids_starter, sep="\n")
