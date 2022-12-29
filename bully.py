@@ -6,13 +6,8 @@ from multiprocessing import Process, Value, Array
 import zmq
 import time
 
-lock = threading.Lock()
-
-has_received_leader_buffer = []
-
-# Set timeout to be 10 sec
+# Set listening timeout to be 5 sec
 TIMEOUT = 5000
-
 
 
 # "responder" method is assigned to each process' listener_thread
@@ -102,7 +97,7 @@ def responder(nodeId, ids_alive, pubsocket, responder_return):
 def leader(nodeId, isStarter, ids_alive):
     
     pid = os.getpid()
-    print("PROCESS STARTS ", pid, nodeId, isStarter, ids_alive)
+    print("PROCESS STARTS ", pid, nodeId, isStarter)
 
     # Open my publisher socket 
     # (also share this pub socket with listener thread)
@@ -162,24 +157,21 @@ def leader(nodeId, isStarter, ids_alive):
 
     
 def main(args):  
-    global ids, ids_alive, ids_starter, has_received_leader_buffer
+    # numProc =  6
+    # numAlive = 4
+    # numStarter = 1
 
-    numProc =  6
-    numAlive = 4
-    numStarter = 1
+    numProc = int(args[1])
+    numAlive = int(args[2])
+    numStarter = int(args[3])
 
-    has_received_leader_buffer = [0 for i in range(numProc)]
-    # numProc = int(args[1])
-    # numAlive = int(args[2])
-    # numStarter = int(args[3])
+    ids = [i for i in range(numProc)]
+    ids_alive = random.sample(ids, numAlive)
+    ids_starter = random.sample(ids_alive, numStarter)
 
-    # ids = [i for i in range(numProc)]
-    # ids_alive = random.sample(ids, numAlive)
-    # ids_starter = random.sample(ids_alive, numStarter)
-
-    ids = [0,1,2,3,4,5,6,7,8,9]
-    ids_alive = [9,8,0,3]
-    ids_starter = [9,3]
+    # ids = [0,1,2,3,4,5,6,7,8,9]
+    # ids_alive = [9,8,0,3]
+    # ids_starter = [9,3]
 
     print("Alives:", ids_alive, sep="\n")
     print("Starters:", ids_starter, sep="\n")
