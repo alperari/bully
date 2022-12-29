@@ -40,8 +40,6 @@ def responder(nodeId, ids_alive, pubsocket, responder_return):
     poller = zmq.Poller()
     poller.register(socket, zmq.POLLIN)
 
-    print("NodeId:", nodeId, "listening on ports:", ports)
-
     # Start receiving messages
     while True:
         evts = dict(poller.poll(timeout=TIMEOUT))
@@ -60,10 +58,8 @@ def responder(nodeId, ids_alive, pubsocket, responder_return):
                 # There is another node with higher,
                 # Become passive listener
                 if to_id == nodeId:
-                    print("nodeId:", nodeId, "received:", message)
                     responder_return["RECEIVED_RESP"] = 1
 
-                
                 if to_id > nodeId:
                     # Eliminate smaller passive nodes as well
                     responder_return["RECEIVED_RESP"] = 1
@@ -72,43 +68,30 @@ def responder(nodeId, ids_alive, pubsocket, responder_return):
             if received_body == "TERMINATE":
                 # Leader is already selected
                 # Notify main and finish myself
-                print("nodeId:", nodeId, "received:", message)
                 return
             
 
             elif received_body == "LEADER":
                 # If sender_id < myid, then send "RESP" to sender
-                if sender_id < nodeId:                    
-                    # TODO: send "RESP" to sender
-                    
-                    print("nodeId:", nodeId, "received:", message)
-
-                    # pubsocket.bind(f"tcp://127.0.0.1:{5550+nodeId}")
+                if sender_id < nodeId:                                        
                     time.sleep(1)        
 
                     resp_message = f"RESP:{5550+nodeId}:{nodeId}:{sender_id}"
                     
-                    print("nodeId:", nodeId, "sending RESP to the sender nodeId:", sender_id, "on its own port:", 5550+nodeId)
+                    print("RESPONDER RESPONDS", nodeId, sender_id)
                     pubsocket.send_string(resp_message)
-                    
                     
                     # after that, notify main to broadcast "LEADER"
                     responder_return["BROADCAST_LEADER"] = 1
-
-                    # return "BROADCAST_LEADER"
                     pass
 
         else:
             # If no message is received for TIMEOUT amount of time
             # Then this means i am leader
             # Notify main
-            print("Timeout!", nodeId)
             if not responder_return["RECEIVED_RESP"]:
                 responder_return["BROADCAST_TERMINATE"] = 1
-
-
-    time.sleep(2)
-    print("End of a processor.")
+    # End of listener_thread
     pass
 
 
@@ -158,7 +141,7 @@ def leader(nodeId, isStarter, ids_alive):
 
         message = f"LEADER:{port}:{nodeId}:-1"
 
-        print("NodeId:", nodeId, "sending message:", message)
+        print("PROCESS MULTICASTS LEADER MSG:", nodeId)
         socket.send_string(message)
 
         time.sleep(3)
@@ -170,8 +153,7 @@ def leader(nodeId, isStarter, ids_alive):
         
         message = f"TERMINATE:{port}:{nodeId}:-1"
 
-        print("NodeId:", nodeId, "sending message:", message)
-
+        print("PROCESS BROADCASTS TERMINATE MSG:", nodeId)
         socket.send_string(message)
 
     listener_thread.join()
@@ -196,8 +178,8 @@ def main(args):
     # ids_starter = random.sample(ids_alive, numStarter)
 
     ids = [0,1,2,3,4,5,6,7,8,9]
-    ids_alive = [2,4,1,9,0]
-    ids_starter = [9,4,2]
+    ids_alive = [9,8,0,3]
+    ids_starter = [9,3]
 
     print("Alives:", ids_alive, sep="\n")
     print("Starters:", ids_starter, sep="\n")
