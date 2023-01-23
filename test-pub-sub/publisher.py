@@ -1,20 +1,25 @@
 import zmq
 import time
+import json
 
-PORT = 3000
+PORT = 5552
+topics = ["LEADER","TERMINATE"]
 
 def main():
     context = zmq.Context()
     socket = context.socket(zmq.PUB)
     socket.bind(f"tcp://127.0.0.1:{PORT}")
 
-    message = 0
+    counter = 1
+
     while True:
-        print(f"Sending message: '{message}' on PORT: {PORT}")
-        socket.send_string(str(message))
+        message = f"{topics[counter%2]}:{PORT}"
 
-        message =  (message+ 1) % 5
-        time.sleep(0.25)
+        print(f"Sending message: {message} on PORT: {PORT}")
+        socket.send_string(message)
 
+        counter += 1
+        time.sleep(1)
+    
 if __name__ == "__main__":
     main()

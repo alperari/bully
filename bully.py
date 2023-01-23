@@ -83,7 +83,7 @@ def responder(nodeId, ids_alive, pubsocket, responder_return):
             if not responder_return["RECEIVED_RESP"]:
                 responder_return["BROADCAST_TERMINATE"] = 1
                 return
-                
+
     # End of listener_thread
     pass
 
@@ -121,14 +121,14 @@ def leader(nodeId, isStarter, ids_alive):
         responder_return["BROADCAST_LEADER"] = 1
         pass
 
-
+    
     while not responder_return["BROADCAST_LEADER"]:
         # Wait until i need to broadcast "LEADER"
         if responder_return["RECEIVED_RESP"] or responder_return["BROADCAST_TERMINATE"]:
             break
         pass
     
-
+    
     if not responder_return["RECEIVED_RESP"] and responder_return["BROADCAST_LEADER"]:
         message = f"LEADER:{port}:{nodeId}:-1"
 
